@@ -1,0 +1,22 @@
+<html>
+
+<body>
+    <h1>Welcome to Chirpy</h1>
+
+    <script>
+        async function updateCounter() {
+            try {
+                const response = await fetch("/metrics");
+                const data = await response.json();
+                const counterElement = document.getElementById("hit-counter")
+                counterElement.textContent = `Hits: ${data.hits}`
+            } catch (error) {
+                console.error("Error updating counter:", error);
+            }
+        }
+
+        window.onload = updateCounter;
+    </script>
+</body>
+
+</html>
