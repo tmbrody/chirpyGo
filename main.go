@@ -1,51 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type apiConfig struct {
 	fileserverHits int
-}
-
-func (cfg *apiConfig) resetCounterHandler(w http.ResponseWriter, r *http.Request) {
-	cfg.fileserverHits = 0
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintf(w, "Hits have been reset to 0.")
-}
-
-func (cfg *apiConfig) requestCounterHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	response := fmt.Sprintf("Hits: %d", cfg.fileserverHits)
-	w.Write([]byte(response))
-}
-
-func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cfg.fileserverHits++
-		next.ServeHTTP(w, r)
-	})
-}
-
-func middlewareCors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func readinessHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
 }
 
 func main() {
@@ -53,15 +16,24 @@ func main() {
 	const port = "8080"
 	var apiCfg apiConfig
 
-	mux := http.NewServeMux()
-	fileServer := http.StripPrefix("/app/", http.FileServer(http.Dir(filepathRoot)))
+	r := chi.NewRouter()
+	r_endpoints := chi.NewRouter()
+	r_admin := chi.NewRouter()
 
-	mux.Handle("/app/", apiCfg.middlewareMetricsInc(fileServer))
-	corsMux := middlewareCors(mux)
+	fileServer := http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot)))
 
-	mux.HandleFunc("/healthz", readinessHandler)
-	mux.HandleFunc("/metrics", apiCfg.requestCounterHandler)
-	mux.HandleFunc("/reset", apiCfg.resetCounterHandler)
+	r.Handle("/app/*", apiCfg.middlewareMetricsInc(fileServer))
+	r.Handle("/app", apiCfg.middlewareMetricsInc(fileServer))
+
+	corsMux := middlewareCors(r)
+
+	r_endpoints.Get("/healthz", readinessHandler)
+	r_endpoints.Get("/reset", apiCfg.resetCounterHandler)
+
+	r_admin.Get("/metrics", apiCfg.requestCounterHandler)
+
+	r.Mount("/api", r_endpoints)
+	r.Mount("/admin", r_admin)
 
 	server := &http.Server{
 		Addr:    ":" + port,
