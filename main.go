@@ -29,6 +29,7 @@ func main() {
 
 	r_endpoints.Get("/healthz", readinessHandler)
 	r_endpoints.Get("/reset", apiCfg.resetCounterHandler)
+	r_endpoints.Post("/validate_chirp", jsonRequestHandler)
 
 	r_admin.Get("/metrics", apiCfg.requestCounterHandler)
 
