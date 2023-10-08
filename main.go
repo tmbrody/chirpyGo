@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net/http"
 
@@ -32,6 +33,17 @@ func main() {
 		}
 	}()
 
+	dbg := flag.Bool("debug", false, "Enable debug mode")
+
+	flag.Parse()
+
+	if *dbg {
+		err := db.DeleteDB("database.json")
+		if err != nil {
+			log.Fatalf("Error deleting the database: %v", err)
+		}
+	}
+
 	var apiCfg apiConfig
 
 	r := chi.NewRouter()
@@ -50,6 +62,9 @@ func main() {
 
 	r_endpoints.Post("/chirps", withDB(createChirpHandler, db))
 	r_endpoints.Get("/chirps", withDB(listChirpsHandler, db))
+	r_endpoints.Get("/chirps/{chirpID}", withDB(GetChirpByID, db))
+
+	r_endpoints.Post("/users", withDB(createUserHandler, db))
 
 	r_admin.Get("/metrics", apiCfg.requestCounterHandler)
 
