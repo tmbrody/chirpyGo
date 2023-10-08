@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/tmbrody/chirpyGo/database"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func createChirpHandler(w http.ResponseWriter, r *http.Request) {
@@ -64,12 +65,12 @@ func GetChirpByID(w http.ResponseWriter, r *http.Request) {
 	chirps, err := db.GetChirps()
 
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to fetch chirp")
+		respondWithError(w, http.StatusInternalServerError, "Failed to fetch chirps")
 		return
 	}
 
 	if chirpID <= 0 || chirpID > len(chirps) {
-		respondWithError(w, http.StatusNotFound, "File not found")
+		respondWithError(w, http.StatusNotFound, "Chirp not found")
 	} else {
 		respondWithJSON(w, http.StatusOK, chirps[chirpID-1])
 	}
@@ -80,7 +81,8 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	db, _ := ctx.Value("db").(*database.DB)
 
 	var params struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -89,13 +91,51 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := db.CreateUser(params.Email)
+	user, err := db.CreateUser(params.Email, params.Password)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to create user")
+		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	respondWithJSON(w, http.StatusCreated, user)
+}
+
+func loginUserHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db, _ := ctx.Value("db").(*database.DB)
+	users, usersResponse, err := db.GetUsers()
+
+	var params struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&params); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to fetch users")
+		return
+	}
+
+	for _, user := range users {
+		for _, userResponse := range usersResponse {
+			if params.Email == userResponse.Email {
+				if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password)); err != nil {
+					respondWithError(w, http.StatusUnauthorized, "Wrong password")
+					return
+				}
+
+				respondWithJSON(w, http.StatusOK, userResponse)
+				return
+			}
+		}
+	}
+
+	respondWithError(w, http.StatusBadRequest, "User not found")
 }
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {

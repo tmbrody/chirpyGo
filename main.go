@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/tmbrody/chirpyGo/database"
@@ -38,9 +39,14 @@ func main() {
 	flag.Parse()
 
 	if *dbg {
-		err := db.DeleteDB("database.json")
-		if err != nil {
-			log.Fatalf("Error deleting the database: %v", err)
+		_, err := os.Stat("database.json")
+		if err == nil {
+			err := db.DeleteDB("database.json")
+			if err != nil {
+				log.Fatalf("Error deleting the database: %v", err)
+			}
+		} else if !os.IsNotExist(err) {
+			log.Fatalf("Error checking for database file: %v", err)
 		}
 	}
 
@@ -65,6 +71,7 @@ func main() {
 	r_endpoints.Get("/chirps/{chirpID}", withDB(GetChirpByID, db))
 
 	r_endpoints.Post("/users", withDB(createUserHandler, db))
+	r_endpoints.Post("/login", withDB(loginUserHandler, db))
 
 	r_admin.Get("/metrics", apiCfg.requestCounterHandler)
 

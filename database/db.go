@@ -14,18 +14,25 @@ type Chirp struct {
 }
 
 type User struct {
+	ID       int    `json:"id"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type UserResponse struct {
 	ID    int    `json:"id"`
 	Email string `json:"email"`
 }
 
 type DB struct {
-	path       string
-	mux        *sync.RWMutex
-	chirps     map[int]Chirp
-	users      map[int]User
-	nextID     int
-	nextUserID int
-	dbLoaded   bool
+	path          string
+	mux           *sync.RWMutex
+	chirps        map[int]Chirp
+	users         map[int]User
+	usersResponse map[int]UserResponse
+	nextID        int
+	nextUserID    int
+	dbLoaded      bool
 }
 
 type DBStructure struct {
@@ -35,13 +42,14 @@ type DBStructure struct {
 
 func NewDB(path string) (*DB, error) {
 	db := &DB{
-		path:       path,
-		mux:        &sync.RWMutex{},
-		chirps:     make(map[int]Chirp),
-		users:      make(map[int]User),
-		nextID:     1,
-		nextUserID: 1,
-		dbLoaded:   false,
+		path:          path,
+		mux:           &sync.RWMutex{},
+		chirps:        make(map[int]Chirp),
+		users:         make(map[int]User),
+		usersResponse: make(map[int]UserResponse),
+		nextID:        1,
+		nextUserID:    1,
+		dbLoaded:      false,
 	}
 
 	if err := db.loadDB(); err != nil {
@@ -49,60 +57,6 @@ func NewDB(path string) (*DB, error) {
 	}
 
 	return db, nil
-}
-
-func (db *DB) CreateChirp(body string) (Chirp, error) {
-	db.mux.Lock()
-	defer db.mux.Unlock()
-
-	if len(body) > 140 {
-		return Chirp{}, errors.New("Chirp is too long")
-	}
-
-	chirp := Chirp{
-		ID:   db.nextID,
-		Body: body,
-	}
-
-	db.chirps[chirp.ID] = chirp
-	db.nextID++
-
-	if err := db.writeDB(); err != nil {
-		return Chirp{}, err
-	}
-
-	return chirp, nil
-}
-
-func (db *DB) GetChirps() ([]Chirp, error) {
-	db.mux.RLock()
-	defer db.mux.RUnlock()
-
-	chirps := make([]Chirp, 0, len(db.chirps))
-	for _, chirp := range db.chirps {
-		chirps = append(chirps, chirp)
-	}
-
-	return chirps, nil
-}
-
-func (db *DB) CreateUser(email string) (User, error) {
-	db.mux.Lock()
-	defer db.mux.Unlock()
-
-	user := User{
-		ID:    db.nextUserID,
-		Email: email,
-	}
-
-	db.users[user.ID] = user
-	db.nextUserID++
-
-	if err := db.writeDB(); err != nil {
-		return User{}, err
-	}
-
-	return user, nil
 }
 
 func (db *DB) writeDB() error {
@@ -149,7 +103,7 @@ func (db *DB) loadDB() error {
 				return errors.New("chirp data is invalid")
 			}
 
-			body, ok := chirpMap["Body"].(string)
+			body, ok := chirpMap["body"].(string)
 			if !ok {
 				return errors.New("chirp body is missing or not a string")
 			}
@@ -178,9 +132,15 @@ func (db *DB) loadDB() error {
 				return errors.New("user email is missing or not a string")
 			}
 
+			password, ok := userMap["password"].(string)
+			if !ok {
+				return errors.New("user password is missing or not a string")
+			}
+
 			user := User{
-				ID:    id,
-				Email: email,
+				ID:       id,
+				Email:    email,
+				Password: password,
 			}
 			db.users[id] = user
 		}
