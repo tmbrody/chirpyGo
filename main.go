@@ -1,11 +1,18 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/tmbrody/chirpyGo/database"
 )
+
+type Chirp struct {
+	ID   int    `json:"id"`
+	Body string `json:"body"`
+}
 
 type apiConfig struct {
 	fileserverHits int
@@ -14,6 +21,17 @@ type apiConfig struct {
 func main() {
 	const filepathRoot = "."
 	const port = "8080"
+
+	db, err := database.NewDB("database.json")
+	if err != nil {
+		log.Fatalf("Error initializing the database: %v", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("Error closing the database: %v", err)
+		}
+	}()
+
 	var apiCfg apiConfig
 
 	r := chi.NewRouter()
@@ -29,7 +47,9 @@ func main() {
 
 	r_endpoints.Get("/healthz", readinessHandler)
 	r_endpoints.Get("/reset", apiCfg.resetCounterHandler)
-	r_endpoints.Post("/validate_chirp", jsonRequestHandler)
+
+	r_endpoints.Post("/chirps", withDB(createChirpHandler, db))
+	r_endpoints.Get("/chirps", withDB(listChirpsHandler, db))
 
 	r_admin.Get("/metrics", apiCfg.requestCounterHandler)
 
@@ -43,8 +63,15 @@ func main() {
 
 	log.Printf("Serving files from %s on port: %s\n", filepathRoot, port)
 
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	if err != nil {
 		panic(err)
+	}
+}
+
+func withDB(next http.HandlerFunc, db *database.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), "db", db)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }

@@ -6,72 +6,51 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
+
+	"github.com/tmbrody/chirpyGo/database"
 )
 
-func jsonRequestHandler(w http.ResponseWriter, r *http.Request) {
-	type parameters struct {
+func createChirpHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db, _ := ctx.Value("db").(*database.DB)
+
+	var params struct {
 		Body string `json:"body"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
-	params := parameters{}
-	err := decoder.Decode(&params)
-
-	if err != nil {
-		log.Printf("Error decoding parameters: %s", err)
-		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
+	if err := decoder.Decode(&params); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
 
-	jsonResponseHandler(w, params.Body)
+	if len(params.Body) > 140 {
+		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
+		return
+	}
+
+	params.Body = remove_profanity(params.Body)
+
+	chirp, err := db.CreateChirp(params.Body)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to create chirp")
+		return
+	}
+
+	respondWithJSON(w, http.StatusCreated, chirp)
 }
 
-func jsonResponseHandler(w http.ResponseWriter, body string) {
-	type returnVals struct {
-		CreatedAt time.Time `json:"created_at"`
-		ID        int       `json:"id"`
-	}
+func listChirpsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	db, _ := ctx.Value("db").(*database.DB)
+	chirps, err := db.GetChirps()
 
-	respBody := returnVals{
-		CreatedAt: time.Now(),
-		ID:        123,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-
-	jsonData, err := json.Marshal(respBody)
 	if err != nil {
-		log.Printf("Error marshalling JSON: %s", err)
-		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
+		respondWithError(w, http.StatusInternalServerError, "Failed to fetch chirps")
 		return
 	}
 
-	var jsonMap map[string]interface{}
-	if err := json.Unmarshal(jsonData, &jsonMap); err != nil {
-		log.Printf("Error unmarshalling JSON: %s", err)
-		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
-		return
-	}
-
-	if len(body) > 140 {
-		respondWithError(w, http.StatusBadRequest,
-			`{"error": "Chirp is too long"}`)
-	} else {
-		jsonMap["valid"] = true
-
-		clean_body := remove_profanity(body)
-		jsonMap["cleaned_body"] = clean_body
-
-		_, err := json.Marshal(jsonMap)
-		if err != nil {
-			log.Printf("Error marshalling updated JSON: %s", err)
-			respondWithError(w, http.StatusInternalServerError, "Something went wrong")
-			return
-		}
-
-		respondWithJSON(w, http.StatusOK, jsonMap)
-	}
+	respondWithJSON(w, http.StatusOK, chirps)
 }
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {
