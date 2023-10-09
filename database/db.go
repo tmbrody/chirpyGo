@@ -9,29 +9,34 @@ import (
 )
 
 type DB struct {
-	path       string
-	mux        *sync.RWMutex
-	chirps     map[int]Chirp
-	users      map[int]User
-	nextID     int
-	nextUserID int
-	dbLoaded   bool
+	path               string
+	mux                *sync.RWMutex
+	chirps             map[int]Chirp
+	users              map[int]User
+	revokedTokens      map[int]RevokedToken
+	nextID             int
+	nextUserID         int
+	nextRevokedTokenID int
+	dbLoaded           bool
 }
 
 type DBStructure struct {
-	Chirps map[int]Chirp `json:"chirps"`
-	Users  map[int]User  `json:"users"`
+	Chirps        map[int]Chirp        `json:"chirps"`
+	Users         map[int]User         `json:"users"`
+	RevokedTokens map[int]RevokedToken `json:"revoked_tokens"`
 }
 
 func NewDB(path string) (*DB, error) {
 	db := &DB{
-		path:       path,
-		mux:        &sync.RWMutex{},
-		chirps:     make(map[int]Chirp),
-		users:      make(map[int]User),
-		nextID:     1,
-		nextUserID: 1,
-		dbLoaded:   false,
+		path:               path,
+		mux:                &sync.RWMutex{},
+		chirps:             make(map[int]Chirp),
+		users:              make(map[int]User),
+		revokedTokens:      make(map[int]RevokedToken),
+		nextID:             1,
+		nextUserID:         1,
+		nextRevokedTokenID: 1,
+		dbLoaded:           false,
 	}
 
 	if err := db.loadDB(); err != nil {
@@ -43,8 +48,9 @@ func NewDB(path string) (*DB, error) {
 
 func (db *DB) writeDB() error {
 	data, err := json.Marshal(map[string]interface{}{
-		"chirps": db.chirps,
-		"users":  db.users,
+		"chirps":         db.chirps,
+		"users":          db.users,
+		"revoked_tokens": db.revokedTokens,
 	})
 	if err != nil {
 		return err
@@ -129,6 +135,30 @@ func (db *DB) loadDB() error {
 		db.nextUserID = findMaxID(db.users) + 1
 	}
 
+	if revokedTokensData, ok := dbStructure["revoked_tokens"].(map[string]interface{}); ok {
+		db.revokedTokens = make(map[int]RevokedToken)
+		for key, val := range revokedTokensData {
+			id, _ := strconv.Atoi(key)
+
+			revokedTokenMap, ok := val.(map[string]interface{})
+			if !ok {
+				return errors.New("user data is invalid")
+			}
+
+			revokedTokenID, ok := revokedTokenMap["revoked_token_id"].(string)
+			if !ok {
+				return errors.New("revoked token id is missing")
+			}
+
+			revokedToken := RevokedToken{
+				ID:             id,
+				RevokedTokenID: revokedTokenID,
+			}
+			db.revokedTokens[id] = revokedToken
+		}
+		db.nextRevokedTokenID = findMaxID(db.revokedTokens) + 1
+	}
+
 	db.dbLoaded = true
 
 	return nil
@@ -140,8 +170,10 @@ func (db *DB) DeleteDB(path string) error {
 
 	db.chirps = make(map[int]Chirp)
 	db.users = make(map[int]User)
+	db.revokedTokens = make(map[int]RevokedToken)
 	db.nextID = 1
 	db.nextUserID = 1
+	db.nextRevokedTokenID = 1
 	db.dbLoaded = false
 
 	err := os.Remove(path)
@@ -164,6 +196,12 @@ func findMaxID(jsonData interface{}) int {
 			}
 		}
 	case map[int]User:
+		for id := range v {
+			if id > maxID {
+				maxID = id
+			}
+		}
+	case map[int]RevokedToken:
 		for id := range v {
 			if id > maxID {
 				maxID = id

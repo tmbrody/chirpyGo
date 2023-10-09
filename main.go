@@ -76,6 +76,9 @@ func main() {
 	r_endpoints.Put("/users", withDB(apiCfg.updateUserHandler, db))
 	r_endpoints.Post("/login", withDB(apiCfg.loginUserHandler, db))
 
+	r_endpoints.Post("/refresh", withDB(apiCfg.refreshTokenHandler, db))
+	r_endpoints.Post("/revoke", withDB(apiCfg.revokeTokenHandler, db))
+
 	r_admin.Get("/metrics", apiCfg.requestCounterHandler)
 
 	r.Mount("/api", r_endpoints)

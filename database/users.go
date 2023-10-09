@@ -8,10 +8,9 @@ import (
 )
 
 type User struct {
-	ID                 int    `json:"id"`
-	Email              string `json:"email"`
-	Password           string `json:"password"`
-	Expires_in_Seconds int    `json:"expires_in_seconds"`
+	ID       int    `json:"id"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 type UserResponse struct {
@@ -50,7 +49,7 @@ func (db *DB) CreateUser(email string, password string) (UserResponse, error) {
 	db.nextUserID++
 
 	if err := db.writeDB(); err != nil {
-		return userResponse, err
+		return UserResponse{}, err
 	}
 
 	return userResponse, nil

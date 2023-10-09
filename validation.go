@@ -108,9 +108,8 @@ func (cfg *apiConfig) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 	users, err := db.GetUsers()
 
 	var params struct {
-		Email              string `json:"email"`
-		Password           string `json:"password"`
-		Expires_in_Seconds int    `json:"expires_in_seconds"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -131,21 +130,26 @@ func (cfg *apiConfig) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			defaultExpiration := 24 * time.Hour
-
-			claims := jwt.RegisteredClaims{
-				Issuer:   "chirpy",
+			accessClaims := jwt.RegisteredClaims{
+				Issuer:   "chirpy-access",
 				Subject:  strconv.Itoa(user.ID),
 				IssuedAt: jwt.NewNumericDate(time.Now().UTC()),
 			}
 
-			if params.Expires_in_Seconds > 0 && params.Expires_in_Seconds < int(defaultExpiration.Seconds()) {
-				claims.ExpiresAt = jwt.NewNumericDate(time.Now().UTC().Add(time.Second * time.Duration(params.Expires_in_Seconds)))
-			} else {
-				claims.ExpiresAt = jwt.NewNumericDate(time.Now().UTC().Add(defaultExpiration))
+			refreshClaims := jwt.RegisteredClaims{
+				Issuer:   "chirpy-refresh",
+				Subject:  strconv.Itoa(user.ID),
+				IssuedAt: jwt.NewNumericDate(time.Now().UTC()),
 			}
 
-			token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+			accessExpiration := time.Hour
+			accessClaims.ExpiresAt = jwt.NewNumericDate(time.Now().UTC().Add(accessExpiration))
+
+			refreshExpiration := 60 * (24 * time.Hour)
+			refreshClaims.ExpiresAt = jwt.NewNumericDate(time.Now().UTC().Add(refreshExpiration))
+
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+			refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
 
 			signedToken, err := token.SignedString([]byte(cfg.jwtSecret))
 			if err != nil {
@@ -153,10 +157,17 @@ func (cfg *apiConfig) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			signedRefreshToken, err := refreshToken.SignedString([]byte(cfg.jwtSecret))
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, "Failed to generate token")
+				return
+			}
+
 			response := map[string]interface{}{
-				"ID":    claims.Subject,
-				"email": user.Email,
-				"token": signedToken,
+				"ID":            accessClaims.Subject,
+				"email":         user.Email,
+				"token":         signedToken,
+				"refresh_token": signedRefreshToken,
 			}
 
 			respondWithJSON(w, http.StatusOK, response)
