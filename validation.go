@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/tmbrody/chirpyGo/database"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -100,14 +102,15 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusCreated, user)
 }
 
-func loginUserHandler(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	db, _ := ctx.Value("db").(*database.DB)
-	users, usersResponse, err := db.GetUsers()
+	users, err := db.GetUsers()
 
 	var params struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email              string `json:"email"`
+		Password           string `json:"password"`
+		Expires_in_Seconds int    `json:"expires_in_seconds"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -122,16 +125,42 @@ func loginUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, user := range users {
-		for _, userResponse := range usersResponse {
-			if params.Email == userResponse.Email {
-				if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password)); err != nil {
-					respondWithError(w, http.StatusUnauthorized, "Wrong password")
-					return
-				}
-
-				respondWithJSON(w, http.StatusOK, userResponse)
+		if params.Email == user.Email {
+			if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password)); err != nil {
+				respondWithError(w, http.StatusUnauthorized, "Wrong password")
 				return
 			}
+
+			defaultExpiration := 24 * time.Hour
+
+			claims := jwt.RegisteredClaims{
+				Issuer:   "chirpy",
+				Subject:  strconv.Itoa(user.ID),
+				IssuedAt: jwt.NewNumericDate(time.Now().UTC()),
+			}
+
+			if params.Expires_in_Seconds > 0 && params.Expires_in_Seconds < int(defaultExpiration.Seconds()) {
+				claims.ExpiresAt = jwt.NewNumericDate(time.Now().UTC().Add(time.Second * time.Duration(params.Expires_in_Seconds)))
+			} else {
+				claims.ExpiresAt = jwt.NewNumericDate(time.Now().UTC().Add(defaultExpiration))
+			}
+
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+			signedToken, err := token.SignedString([]byte(cfg.jwtSecret))
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, "Failed to generate token")
+				return
+			}
+
+			response := map[string]interface{}{
+				"ID":    claims.Subject,
+				"email": user.Email,
+				"token": signedToken,
+			}
+
+			respondWithJSON(w, http.StatusOK, response)
+			return
 		}
 	}
 

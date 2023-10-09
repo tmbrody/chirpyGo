@@ -1,38 +1,94 @@
 package database
 
-import "errors"
+import (
+	"errors"
+	"strconv"
 
-func (db *DB) CreateChirp(body string) (Chirp, error) {
+	"golang.org/x/crypto/bcrypt"
+)
+
+type User struct {
+	ID                 int    `json:"id"`
+	Email              string `json:"email"`
+	Password           string `json:"password"`
+	Expires_in_Seconds int    `json:"expires_in_seconds"`
+}
+
+type UserResponse struct {
+	ID    int    `json:"id"`
+	Email string `json:"email"`
+}
+
+func (db *DB) CreateUser(email string, password string) (UserResponse, error) {
 	db.mux.Lock()
 	defer db.mux.Unlock()
 
-	if len(body) > 140 {
-		return Chirp{}, errors.New("Chirp is too long")
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		panic(err)
 	}
 
-	chirp := Chirp{
-		ID:   db.nextID,
-		Body: body,
+	user := User{
+		ID:       db.nextUserID,
+		Email:    email,
+		Password: string(hashedPassword),
 	}
 
-	db.chirps[chirp.ID] = chirp
-	db.nextID++
+	userResponse := UserResponse{
+		ID:    db.nextUserID,
+		Email: email,
+	}
+
+	for _, userData := range db.users {
+		if user.Email == userData.Email {
+			return UserResponse{}, errors.New("email already in use")
+		}
+	}
+
+	db.users[user.ID] = user
+
+	db.nextUserID++
 
 	if err := db.writeDB(); err != nil {
-		return Chirp{}, err
+		return userResponse, err
 	}
 
-	return chirp, nil
+	return userResponse, nil
 }
 
-func (db *DB) GetChirps() ([]Chirp, error) {
+func (db *DB) GetUsers() ([]User, error) {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
 
-	chirps := make([]Chirp, 0, len(db.chirps))
-	for _, chirp := range db.chirps {
-		chirps = append(chirps, chirp)
+	users := make([]User, 0, len(db.users))
+	for _, user := range db.users {
+		users = append(users, user)
 	}
 
-	return chirps, nil
+	return users, nil
+}
+
+func (db *DB) UpdateUser(ID string, email string, password string) (User, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+
+	userID, err := strconv.Atoi(ID)
+	if err != nil {
+		panic(err)
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		panic(err)
+	}
+
+	user := User{
+		ID:       userID,
+		Email:    email,
+		Password: string(hashedPassword),
+	}
+
+	db.users[userID] = user
+
+	return user, nil
 }

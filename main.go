@@ -8,19 +8,20 @@ import (
 	"os"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/joho/godotenv"
 	"github.com/tmbrody/chirpyGo/database"
 )
 
-type Chirp struct {
-	ID   int    `json:"id"`
-	Body string `json:"body"`
-}
-
 type apiConfig struct {
 	fileserverHits int
+	jwtSecret      string
 }
 
 func main() {
+	godotenv.Load()
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+
 	const filepathRoot = "."
 	const port = "8080"
 
@@ -51,6 +52,7 @@ func main() {
 	}
 
 	var apiCfg apiConfig
+	apiCfg.jwtSecret = jwtSecret
 
 	r := chi.NewRouter()
 	r_endpoints := chi.NewRouter()
@@ -71,7 +73,8 @@ func main() {
 	r_endpoints.Get("/chirps/{chirpID}", withDB(GetChirpByID, db))
 
 	r_endpoints.Post("/users", withDB(createUserHandler, db))
-	r_endpoints.Post("/login", withDB(loginUserHandler, db))
+	r_endpoints.Put("/users", withDB(apiCfg.updateUserHandler, db))
+	r_endpoints.Post("/login", withDB(apiCfg.loginUserHandler, db))
 
 	r_admin.Get("/metrics", apiCfg.requestCounterHandler)
 

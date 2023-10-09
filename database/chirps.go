@@ -2,61 +2,44 @@ package database
 
 import (
 	"errors"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
-func (db *DB) CreateUser(email string, password string) (UserResponse, error) {
+type Chirp struct {
+	ID   int    `json:"id"`
+	Body string `json:"body"`
+}
+
+func (db *DB) CreateChirp(body string) (Chirp, error) {
 	db.mux.Lock()
 	defer db.mux.Unlock()
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		panic(err)
+	if len(body) > 140 {
+		return Chirp{}, errors.New("Chirp is too long")
 	}
 
-	user := User{
-		ID:       db.nextUserID,
-		Email:    email,
-		Password: string(hashedPassword),
+	chirp := Chirp{
+		ID:   db.nextID,
+		Body: body,
 	}
 
-	userResponse := UserResponse{
-		ID:    db.nextUserID,
-		Email: email,
-	}
-
-	for _, userData := range db.users {
-		if user.Email == userData.Email {
-			return UserResponse{}, errors.New("email already in use")
-		}
-	}
-
-	db.users[user.ID] = user
-	db.usersResponse[user.ID] = userResponse
-
-	db.nextUserID++
+	db.chirps[chirp.ID] = chirp
+	db.nextID++
 
 	if err := db.writeDB(); err != nil {
-		return userResponse, err
+		return Chirp{}, err
 	}
 
-	return userResponse, nil
+	return chirp, nil
 }
 
-func (db *DB) GetUsers() ([]User, []UserResponse, error) {
+func (db *DB) GetChirps() ([]Chirp, error) {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
 
-	users := make([]User, 0, len(db.users))
-	for _, user := range db.users {
-		users = append(users, user)
+	chirps := make([]Chirp, 0, len(db.chirps))
+	for _, chirp := range db.chirps {
+		chirps = append(chirps, chirp)
 	}
 
-	usersResponse := make([]UserResponse, 0, len(db.usersResponse))
-	for _, userResponse := range db.usersResponse {
-		usersResponse = append(usersResponse, userResponse)
-	}
-
-	return users, usersResponse, nil
+	return chirps, nil
 }

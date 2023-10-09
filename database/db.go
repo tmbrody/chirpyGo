@@ -8,31 +8,14 @@ import (
 	"sync"
 )
 
-type Chirp struct {
-	ID   int    `json:"id"`
-	Body string `json:"body"`
-}
-
-type User struct {
-	ID       int    `json:"id"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-type UserResponse struct {
-	ID    int    `json:"id"`
-	Email string `json:"email"`
-}
-
 type DB struct {
-	path          string
-	mux           *sync.RWMutex
-	chirps        map[int]Chirp
-	users         map[int]User
-	usersResponse map[int]UserResponse
-	nextID        int
-	nextUserID    int
-	dbLoaded      bool
+	path       string
+	mux        *sync.RWMutex
+	chirps     map[int]Chirp
+	users      map[int]User
+	nextID     int
+	nextUserID int
+	dbLoaded   bool
 }
 
 type DBStructure struct {
@@ -42,14 +25,13 @@ type DBStructure struct {
 
 func NewDB(path string) (*DB, error) {
 	db := &DB{
-		path:          path,
-		mux:           &sync.RWMutex{},
-		chirps:        make(map[int]Chirp),
-		users:         make(map[int]User),
-		usersResponse: make(map[int]UserResponse),
-		nextID:        1,
-		nextUserID:    1,
-		dbLoaded:      false,
+		path:       path,
+		mux:        &sync.RWMutex{},
+		chirps:     make(map[int]Chirp),
+		users:      make(map[int]User),
+		nextID:     1,
+		nextUserID: 1,
+		dbLoaded:   false,
 	}
 
 	if err := db.loadDB(); err != nil {
