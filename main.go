@@ -15,6 +15,7 @@ import (
 type apiConfig struct {
 	fileserverHits int
 	jwtSecret      string
+	polkaKey       string
 }
 
 type contextKey string
@@ -25,6 +26,7 @@ func main() {
 	godotenv.Load()
 
 	jwtSecret := os.Getenv("JWT_SECRET")
+	polkaKey := os.Getenv("POLKA_KEY")
 
 	const filepathRoot = "."
 	const port = "8080"
@@ -57,6 +59,7 @@ func main() {
 
 	var apiCfg apiConfig
 	apiCfg.jwtSecret = jwtSecret
+	apiCfg.polkaKey = polkaKey
 
 	r := chi.NewRouter()
 	r_endpoints := chi.NewRouter()
@@ -83,6 +86,8 @@ func main() {
 
 	r_endpoints.Post("/refresh", withDB(apiCfg.refreshTokenHandler, db))
 	r_endpoints.Post("/revoke", withDB(apiCfg.revokeTokenHandler, db))
+
+	r_endpoints.Post("/polka/webhooks", withDB(apiCfg.polkaWebhookHandler, db))
 
 	r_admin.Get("/metrics", apiCfg.requestCounterHandler)
 

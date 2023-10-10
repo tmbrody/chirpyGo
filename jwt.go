@@ -15,7 +15,7 @@ func extractJWTTokenFromHeader(r *http.Request) string {
 		return ""
 	}
 
-	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+	if len(authHeader) > 7 && (authHeader[:7] == "Bearer " || authHeader[:7] == "ApiKey ") {
 		return authHeader[7:]
 	}
 	return ""

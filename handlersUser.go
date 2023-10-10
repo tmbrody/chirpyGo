@@ -38,6 +38,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	db, _ := ctx.Value(dbContextKey).(*database.DB)
+	users, _ := db.GetUsers()
 
 	var params struct {
 		Email    string `json:"email"`
@@ -68,13 +69,13 @@ func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	userID, ok := token.Claims.(jwt.MapClaims)["sub"].(string)
+	userID, ok := token.Claims.(jwt.MapClaims)["sub"].(int)
 	if !ok {
 		respondWithError(w, http.StatusUnauthorized, "Failed to extract user ID from JWT claims")
 		return
 	}
 
-	updatedUser, err := db.UpdateUser(userID, params.Email, params.Password)
+	updatedUser, err := db.UpdateUser(userID, params.Email, params.Password, users[userID].IsChirpyRed, false)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to update user data")
 		return
@@ -149,11 +150,14 @@ func (cfg *apiConfig) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			userID, _ := strconv.Atoi(accessClaims.Subject)
+
 			response := map[string]interface{}{
-				"ID":            accessClaims.Subject,
+				"id":            userID,
 				"email":         user.Email,
 				"token":         signedToken,
 				"refresh_token": signedRefreshToken,
+				"is_chirpy_red": user.IsChirpyRed,
 			}
 
 			respondWithJSON(w, http.StatusOK, response)

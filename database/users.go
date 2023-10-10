@@ -2,20 +2,21 @@ package database
 
 import (
 	"errors"
-	"strconv"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
-	ID       int    `json:"id"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	ID          int    `json:"id"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	IsChirpyRed bool   `json:"is_chirpy_red"`
 }
 
 type UserResponse struct {
-	ID    int    `json:"id"`
-	Email string `json:"email"`
+	ID          int    `json:"id"`
+	Email       string `json:"email"`
+	IsChirpyRed bool   `json:"is_chirpy_red"`
 }
 
 func (db *DB) CreateUser(email string, password string) (UserResponse, error) {
@@ -28,14 +29,16 @@ func (db *DB) CreateUser(email string, password string) (UserResponse, error) {
 	}
 
 	user := User{
-		ID:       db.nextUserID,
-		Email:    email,
-		Password: string(hashedPassword),
+		ID:          db.nextUserID,
+		Email:       email,
+		Password:    string(hashedPassword),
+		IsChirpyRed: false,
 	}
 
 	userResponse := UserResponse{
-		ID:    db.nextUserID,
-		Email: email,
+		ID:          db.nextUserID,
+		Email:       email,
+		IsChirpyRed: false,
 	}
 
 	for _, userData := range db.users {
@@ -67,24 +70,23 @@ func (db *DB) GetUsers() ([]User, error) {
 	return users, nil
 }
 
-func (db *DB) UpdateUser(ID string, email string, password string) (User, error) {
+func (db *DB) UpdateUser(userID int, email string, password string, ischirpyred bool, usingWebhook bool) (User, error) {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
 
-	userID, err := strconv.Atoi(ID)
-	if err != nil {
-		panic(err)
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		panic(err)
+	if !usingWebhook {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			panic(err)
+		}
+		password = string(hashedPassword)
 	}
 
 	user := User{
-		ID:       userID,
-		Email:    email,
-		Password: string(hashedPassword),
+		ID:          userID,
+		Email:       email,
+		Password:    password,
+		IsChirpyRed: ischirpyred,
 	}
 
 	db.users[userID] = user
