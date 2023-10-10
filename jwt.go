@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -9,59 +8,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/tmbrody/chirpyGo/database"
 )
-
-func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	db, _ := ctx.Value("db").(*database.DB)
-
-	var params struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-
-	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(&params); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid JSON")
-		return
-	}
-
-	tokenString := extractJWTTokenFromHeader(r)
-	if tokenString == "" {
-		respondWithError(w, http.StatusUnauthorized, "JWT token is missing or invalid")
-		return
-	}
-
-	token, err := parseAndValidateJWTToken(cfg, tokenString)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Invalid JWT token")
-		return
-	}
-
-	issuer, _ := token.Claims.GetIssuer()
-	if issuer == "chirpy-refresh" {
-		respondWithError(w, http.StatusUnauthorized, "Using JWT refresh token")
-		return
-	}
-
-	userID, ok := token.Claims.(jwt.MapClaims)["sub"].(string)
-	if !ok {
-		respondWithError(w, http.StatusUnauthorized, "Failed to extract user ID from JWT claims")
-		return
-	}
-
-	updatedUser, err := db.UpdateUser(userID, params.Email, params.Password)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to update user data")
-		return
-	}
-
-	response := map[string]interface{}{
-		"id":    updatedUser.ID,
-		"email": updatedUser.Email,
-	}
-
-	respondWithJSON(w, http.StatusOK, response)
-}
 
 func extractJWTTokenFromHeader(r *http.Request) string {
 	authHeader := r.Header.Get("Authorization")
@@ -91,7 +37,7 @@ func parseAndValidateJWTToken(cfg *apiConfig, tokenString string) (*jwt.Token, e
 
 func (cfg *apiConfig) refreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	db, _ := ctx.Value("db").(*database.DB)
+	db, _ := ctx.Value(dbContextKey).(*database.DB)
 
 	tokenString := extractJWTTokenFromHeader(r)
 	if tokenString == "" {
@@ -124,7 +70,10 @@ func (cfg *apiConfig) refreshTokenHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	userID, _ := token.Claims.GetSubject()
+	userID, err := token.Claims.GetSubject()
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unable to find User ID")
+	}
 
 	accessClaims := jwt.RegisteredClaims{
 		Issuer:   "chirpy-access",
@@ -152,7 +101,7 @@ func (cfg *apiConfig) refreshTokenHandler(w http.ResponseWriter, r *http.Request
 
 func (cfg *apiConfig) revokeTokenHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	db, _ := ctx.Value("db").(*database.DB)
+	db, _ := ctx.Value(dbContextKey).(*database.DB)
 
 	tokenString := extractJWTTokenFromHeader(r)
 	if tokenString == "" {

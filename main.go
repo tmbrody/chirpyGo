@@ -17,6 +17,10 @@ type apiConfig struct {
 	jwtSecret      string
 }
 
+type contextKey string
+
+const dbContextKey contextKey = "db"
+
 func main() {
 	godotenv.Load()
 
@@ -68,9 +72,10 @@ func main() {
 	r_endpoints.Get("/healthz", readinessHandler)
 	r_endpoints.Get("/reset", apiCfg.resetCounterHandler)
 
-	r_endpoints.Post("/chirps", withDB(createChirpHandler, db))
+	r_endpoints.Post("/chirps", withDB(apiCfg.createChirpHandler, db))
 	r_endpoints.Get("/chirps", withDB(listChirpsHandler, db))
-	r_endpoints.Get("/chirps/{chirpID}", withDB(GetChirpByID, db))
+	r_endpoints.Get("/chirps/{chirpID}", withDB(getChirpByID, db))
+	r_endpoints.Delete("/chirps/{chirpID}", withDB(apiCfg.deleteChirpHandler, db))
 
 	r_endpoints.Post("/users", withDB(createUserHandler, db))
 	r_endpoints.Put("/users", withDB(apiCfg.updateUserHandler, db))
@@ -99,7 +104,7 @@ func main() {
 
 func withDB(next http.HandlerFunc, db *database.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), "db", db)
+		ctx := context.WithValue(r.Context(), dbContextKey, db)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }

@@ -2,14 +2,16 @@ package database
 
 import (
 	"errors"
+	"strconv"
 )
 
 type Chirp struct {
-	ID   int    `json:"id"`
-	Body string `json:"body"`
+	ID       int    `json:"id"`
+	Body     string `json:"body"`
+	AuthorID int    `json:"author_id"`
 }
 
-func (db *DB) CreateChirp(body string) (Chirp, error) {
+func (db *DB) CreateChirp(body string, ID string) (Chirp, error) {
 	db.mux.Lock()
 	defer db.mux.Unlock()
 
@@ -17,9 +19,15 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 		return Chirp{}, errors.New("Chirp is too long")
 	}
 
+	authorID, err := strconv.Atoi(ID)
+	if err != nil {
+		panic(err)
+	}
+
 	chirp := Chirp{
-		ID:   db.nextID,
-		Body: body,
+		ID:       db.nextID,
+		Body:     body,
+		AuthorID: authorID,
 	}
 
 	db.chirps[chirp.ID] = chirp
@@ -42,4 +50,13 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 	}
 
 	return chirps, nil
+}
+
+func (db *DB) DeleteChirp(chirp Chirp) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+
+	delete(db.chirps, chirp.ID)
+
+	return nil
 }
