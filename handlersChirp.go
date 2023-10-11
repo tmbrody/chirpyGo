@@ -5,10 +5,13 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/tmbrody/chirpyGo/database"
 )
+
+var chirpsMutex sync.RWMutex
 
 func (cfg *apiConfig) createChirpHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -53,16 +56,62 @@ func (cfg *apiConfig) createChirpHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func listChirpsHandler(w http.ResponseWriter, r *http.Request) {
+	chirpsMutex.Lock()
+	defer chirpsMutex.Unlock()
+
 	ctx := r.Context()
 	db, _ := ctx.Value(dbContextKey).(*database.DB)
-	chirps, err := db.GetChirps()
 
+	chirps, err := db.GetChirps()
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to fetch chirps")
+		respondWithError(w, http.StatusUnauthorized, "Unable to find chirps")
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, chirps)
+	sort := r.URL.Query().Get("sort")
+	id := r.URL.Query().Get("author_id")
+
+	var response []database.Chirp
+
+	if sort != "desc" {
+		sort = "asc"
+	}
+
+	if id == "" {
+		if sort == "asc" {
+			respondWithJSON(w, http.StatusOK, chirps)
+			return
+		} else if sort == "desc" {
+			for i := len(chirps) - 1; i >= 0; i-- {
+				response = append(response, chirps[i])
+			}
+
+			respondWithJSON(w, http.StatusOK, response)
+			return
+		}
+	}
+
+	authorID, err := strconv.Atoi(id)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Failed to convert author ID into int")
+		return
+	}
+
+	if sort == "asc" {
+		for _, chirp := range chirps {
+			if chirp.AuthorID == authorID {
+				response = append(response, chirp)
+			}
+		}
+	} else if sort == "desc" {
+		for i := len(chirps) - 1; i >= 0; i-- {
+			if chirps[i].AuthorID == authorID {
+				response = append(response, chirps[i])
+			}
+		}
+	}
+
+	respondWithJSON(w, http.StatusOK, response)
 }
 
 func getChirpByID(w http.ResponseWriter, r *http.Request) {

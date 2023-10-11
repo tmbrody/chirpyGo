@@ -41,8 +41,8 @@ func (db *DB) CreateChirp(body string, ID string) (Chirp, error) {
 }
 
 func (db *DB) GetChirps() ([]Chirp, error) {
-	db.mux.RLock()
-	defer db.mux.RUnlock()
+	db.mux.Lock()
+	defer db.mux.Unlock()
 
 	chirps := make([]Chirp, 0, len(db.chirps))
 	for _, chirp := range db.chirps {
